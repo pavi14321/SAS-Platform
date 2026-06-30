@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   Menu,
   X,
@@ -299,15 +300,15 @@ export default function SaasLandingPage() {
               {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            <a href="#" className="text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-50 transition-colors px-2 py-2">
+            <Link to="/login" className="text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-50 transition-colors px-2 py-2">
               Log in
-            </a>
-            <a
-              href="#pricing"
+            </Link>
+            <Link
+              to="/signup"
               className={`text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors text-white ${currentTheme.bg} ${currentTheme.focus}`}
             >
               Start selling
-            </a>
+            </Link>
           </div>
 
           {/* Mobile UI Buttons */}
@@ -371,12 +372,12 @@ export default function SaasLandingPage() {
           </div>
           
           <div className="flex flex-col gap-3 pb-6 mt-8">
-            <a href="#" className="text-center text-sm font-medium text-neutral-800 dark:text-neutral-200 border border-neutral-300 dark:border-neutral-700 rounded-xl py-3 bg-white/40 dark:bg-neutral-900/40 shadow-sm">
+            <Link to="/login" onClick={() => setMenuOpen(false)} className="text-center text-sm font-medium text-neutral-800 dark:text-neutral-200 border border-neutral-300 dark:border-neutral-700 rounded-xl py-3 bg-white/40 dark:bg-neutral-900/40 shadow-sm">
               Log in
-            </a>
-            <a href="#pricing" onClick={() => setMenuOpen(false)} className={`text-center text-sm font-semibold rounded-xl py-3 shadow-md text-white ${currentTheme.bg}`}>
+            </Link>
+            <Link to="/signup" onClick={() => setMenuOpen(false)} className={`text-center text-sm font-semibold rounded-xl py-3 shadow-md text-white ${currentTheme.bg}`}>
               Start selling
-            </a>
+            </Link>
           </div>
         </div>
       )}
@@ -404,12 +405,12 @@ export default function SaasLandingPage() {
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-center">
-              <a
-                href="#pricing"
+              <Link
+                to="/signup"
                 className={`inline-flex items-center justify-center gap-2 text-white font-semibold text-sm px-6 py-3.5 rounded-lg transition-colors ${currentTheme.bg} ${currentTheme.focus}`}
               >
                 Start selling — no card needed <ArrowRight size={16} />
-              </a>
+              </Link>
               <a
                 href="#how"
                 className={`inline-flex items-center justify-center gap-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200 border border-neutral-300 dark:border-neutral-700 px-6 py-3.5 rounded-lg hover:border-neutral-900 dark:hover:border-neutral-400 transition-colors focus:outline-none ${currentTheme.focus}`}
@@ -602,9 +603,9 @@ export default function SaasLandingPage() {
                       </li>
                     ))}
                   </ul>
-                  <a href="#" className={`mt-7 inline-flex items-center justify-center gap-2 text-sm font-semibold px-5 py-3 rounded-lg transition-all text-white ${p.highlighted ? currentTheme.bg : "bg-neutral-900 dark:bg-neutral-50 dark:text-neutral-950"}`}>
+                  <Link to="/signup" className={`mt-7 inline-flex items-center justify-center gap-2 text-sm font-semibold px-5 py-3 rounded-lg transition-all text-white ${p.highlighted ? currentTheme.bg : "bg-neutral-900 dark:bg-neutral-50 dark:text-neutral-950"}`}>
                     {p.cta} <ArrowUpRight size={15} />
-                  </a>
+                  </Link>
                 </div>
               );
             })}
