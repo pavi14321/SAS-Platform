@@ -9,6 +9,7 @@ import {
   FaUser,
   FaCheckCircle,
   FaTimesCircle,
+  FaArrowLeft,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 
@@ -95,7 +96,6 @@ function OtpModal({ email, onClose, onVerified }) {
     // TODO: replace with real verification call (e.g. axios.post("/api/auth/verify-otp", { email, code }))
     setTimeout(() => {
       setVerifying(false);
-      toast.success("Email verified successfully");
       onVerified();
     }, 1200);
   };
@@ -216,7 +216,7 @@ export default function Signup() {
 
     if (!email) newErrors.email = "Email is required";
     else if (!EMAIL_REGEX.test(email))
-      newErrors.email = "Enter valid email";
+      newErrors.email = "Please enter a valid email format";
 
     if (!password) newErrors.password = "Password is required";
     else if (!isPasswordStrong)
@@ -236,11 +236,11 @@ export default function Signup() {
 
     setLoading(true);
 
-    // TODO: replace with real signup call (e.g. axios.post("/api/auth/signup", { name, email, password }))
-    // then trigger your backend to email a 6-digit OTP to `email`
+    // TODO: replace with a real "send OTP" call (e.g. axios.post("/api/auth/send-otp", { email }))
+    // The account itself is only created after the OTP is verified (see onOtpVerified below).
     setTimeout(() => {
       setLoading(false);
-      toast.success("Account created — verify your email to continue");
+      toast.success("OTP sent to your email");
       setShowOtpModal(true);
     }, 1500);
   };
@@ -250,6 +250,10 @@ export default function Signup() {
   };
 
   const onOtpVerified = () => {
+    // TODO: replace with real signup call (e.g. axios.post("/api/auth/signup", { name, email, password }))
+    // Have the backend return an error like "An account with this email already
+    // exists" if it does, so you can show that to the user here.
+    toast.success("Account created successfully! Please login");
     setShowOtpModal(false);
     navigate("/login");
   };
@@ -257,6 +261,13 @@ export default function Signup() {
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#071311] flex items-center justify-center px-4 py-4 relative">
       <div className="absolute inset-0 bg-gradient-to-br from-green-900/30 via-transparent to-emerald-900/20" />
+
+      <button
+        onClick={() => navigate("/")}
+        className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10 inline-flex items-center gap-2 text-sm text-white/70 hover:text-white transition"
+      >
+        <FaArrowLeft size={12} /> Back
+      </button>
 
       <div className="relative w-full max-w-md max-h-full overflow-y-auto">
         <div className="backdrop-blur-xl bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8">

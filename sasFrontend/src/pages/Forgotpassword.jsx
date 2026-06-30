@@ -94,7 +94,6 @@ function OtpModal({ email, onClose, onVerified }) {
     // TODO: replace with real verification call (e.g. axios.post("/api/auth/verify-otp", { email, code }))
     setTimeout(() => {
       setVerifying(false);
-      toast.success("Email verified successfully");
       onVerified();
     }, 1200);
   };
@@ -125,8 +124,8 @@ function OtpModal({ email, onClose, onVerified }) {
           <h2 className="text-2xl font-bold mt-4">Verify it's you</h2>
 
           <p className="text-gray-500 text-sm mt-2">
-            Your password was updated. We've sent a 6-digit OTP to your
-            registered email id to confirm this change
+            We've sent a 6-digit OTP to your registered email id. Enter it
+            below to confirm your new password.
           </p>
           <p className="text-green-700 font-semibold text-sm mt-1 break-all">
             {email}
@@ -215,9 +214,10 @@ export default function ForgotPassword() {
       return;
     }
     if (!EMAIL_REGEX.test(email)) {
-      setError("Enter valid email");
+      setError("Please enter a valid email format");
       return;
     }
+
     setError("");
     setStep(2);
   };
@@ -243,11 +243,11 @@ export default function ForgotPassword() {
     setError("");
     setLoading(true);
 
-    // TODO: replace with real call (e.g. axios.post("/api/auth/reset-password", { email, password }))
-    // then trigger your backend to email a 6-digit OTP to `email` confirming the change
+    // TODO: replace with a real "send OTP" call (e.g. axios.post("/api/auth/send-otp", { email }))
+    // The password itself is only changed after the OTP is verified (see onOtpVerified below).
     setTimeout(() => {
       setLoading(false);
-      toast.success("Password updated — verify your email to confirm");
+      toast.success("OTP sent to your email");
       setShowOtpModal(true);
     }, 1500);
   };
@@ -257,6 +257,8 @@ export default function ForgotPassword() {
   };
 
   const onOtpVerified = () => {
+    // TODO: replace with real call (e.g. axios.post("/api/auth/reset-password", { email, password }))
+    toast.success("Password updated successfully");
     setShowOtpModal(false);
     navigate("/login");
   };
@@ -264,6 +266,13 @@ export default function ForgotPassword() {
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#071311] flex items-center justify-center px-4 py-4 relative">
       <div className="absolute inset-0 bg-gradient-to-br from-green-900/30 via-transparent to-emerald-900/20" />
+
+      <button
+        onClick={() => navigate("/")}
+        className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10 inline-flex items-center gap-2 text-sm text-white/70 hover:text-white transition"
+      >
+        <FaArrowLeft size={12} /> Back
+      </button>
 
       <div className="relative w-full max-w-md max-h-full overflow-y-auto">
         <div className="backdrop-blur-xl bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8">

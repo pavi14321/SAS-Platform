@@ -8,6 +8,7 @@ import {
   FaLock,
   FaCheckCircle,
   FaTimesCircle,
+  FaArrowLeft,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 
@@ -33,7 +34,7 @@ export default function Login() {
       return false;
     }
     if (!EMAIL_REGEX.test(email)) {
-      setError("Enter valid email");
+      setError("Please enter a valid email format");
       return false;
     }
     setError("");
@@ -41,7 +42,8 @@ export default function Login() {
   };
 
   const continueHandler = () => {
-    if (validateEmail()) setStep(2);
+    if (!validateEmail()) return;
+    setStep(2);
   };
 
   const loginHandler = () => {
@@ -54,6 +56,8 @@ export default function Login() {
     setLoading(true);
 
     // TODO: replace with real auth call (e.g. axios.post("/api/auth/login", { email, password }))
+    // Have the backend return a generic error like "Incorrect email or password"
+    // on failure (don't reveal whether the email exists or the password was wrong).
     setTimeout(() => {
       setLoading(false);
       toast.success("Login successful");
@@ -68,6 +72,13 @@ export default function Login() {
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#071311] flex items-center justify-center px-4 py-4 relative">
       <div className="absolute inset-0 bg-gradient-to-br from-green-900/30 via-transparent to-emerald-900/20" />
+
+      <button
+        onClick={() => navigate("/")}
+        className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10 inline-flex items-center gap-2 text-sm text-white/70 hover:text-white transition"
+      >
+        <FaArrowLeft size={12} /> Back
+      </button>
 
       <div className="relative w-full max-w-md max-h-full overflow-y-auto">
         <div className="backdrop-blur-xl bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8">
