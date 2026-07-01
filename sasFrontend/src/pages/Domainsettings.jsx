@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   FaGlobe,
   FaCheckCircle,
@@ -14,14 +14,7 @@ import {
   FaInfoCircle,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-const FREE_SUBDOMAIN = "mystore.yoursaas.com";
-
-const DNS_RECORDS = [
-  { type: "A", name: "@", value: "76.76.21.21", ttl: "3600" },
-  { type: "CNAME", name: "www", value: "cname.yoursaas.com", ttl: "3600" },
-];
+import api, { getErrorMessage } from "../utils/api";
 
 const REGISTRARS = [
   { name: "GoDaddy", url: "https://godaddy.com", logo: "GD" },
@@ -39,6 +32,58 @@ export default function DomainSettings() {
   const [verifyError, setVerifyError] = useState("");
   const [connectedDomains, setConnectedDomains] = useState([]);
   const [copiedKey, setCopiedKey] = useState(null);
+  const [dnsRecords, setDnsRecords] = useState([]);
+  const [freeSubdomain, setFreeSubdomain] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null); // domain id currently being verified/removed
+
+  // ── initial load: store subdomain, DNS records, connected domains ──
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [storeRes, dnsRes, domainsRes] = await Promise.all([
+        api.get("/store"),
+        api.get("/domains/dns-records"),
+        api.get("/domains"),
+      ]);
+      setFreeSubdomain(`${storeRes.data.subdomain}.yoursaas.com`);
+      setDnsRecords(dnsRes.data);
+      setConnectedDomains(domainsRes.data.filter((d) => d.type === "custom"));
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't load domain settings."));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  // ── real-time-ish verification: silently re-check any pending domain
+  // every 15s so the badge flips to "active" without the user clicking
+  // anything. Stops automatically once nothing is pending. ──
+  const pendingIds = connectedDomains.filter((d) => d.status !== "active").map((d) => d.id);
+  const pendingKey = pendingIds.join(",");
+
+  useEffect(() => {
+    if (!pendingIds.length) return;
+
+    const interval = setInterval(async () => {
+      for (const id of pendingIds) {
+        try {
+          const { data } = await api.post(`/domains/${id}/verify`);
+          setConnectedDomains((prev) => prev.map((d) => (d.id === id ? data : d)));
+          if (data.dns_ok) toast.success(`${data.domain} is now verified!`);
+        } catch {
+          // silent — this is a background poll, don't spam error toasts
+        }
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey]);
 
   const copy = (text, key) => {
     navigator.clipboard.writeText(text);
@@ -52,7 +97,7 @@ export default function DomainSettings() {
       d.replace(/^https?:\/\//, "").replace(/\/$/, "")
     );
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const cleaned = customDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
     if (!isValidDomain(cleaned)) {
       setVerifyError("Enter a valid domain like yourbusiness.com or www.yourbusiness.com");
@@ -61,37 +106,77 @@ export default function DomainSettings() {
     setVerifyError("");
     setVerifyStatus(STATUS.checking);
 
-    // Simulate DNS check (replace with real API call)
-    setTimeout(() => {
-      // 70% success for demo
-      if (Math.random() > 0.3) {
-        setConnectedDomains((prev) => [
-          ...prev.filter((d) => d.domain !== cleaned),
-          { domain: cleaned, ssl: true, primary: prev.length === 0 },
-        ]);
-        setVerifyStatus(STATUS.active);
-        setCustomDomain("");
-        toast.success("Domain connected successfully!");
-        setTab("overview");
-      } else {
+    try {
+      const { data } = await api.post("/domains/connect", { domain: cleaned });
+
+      if (data.dns_error) {
         setVerifyStatus(STATUS.error);
-        setVerifyError(
-          "DNS records not found yet. It can take up to 48 hours to propagate. Double-check your records and try again."
-        );
+        setVerifyError(data.message);
+        // still record it in the list — backend already saved it as "error"
+        setConnectedDomains((prev) => [...prev.filter((d) => d.domain !== cleaned), data]);
+        return;
       }
-    }, 2800);
+
+      setConnectedDomains((prev) => [...prev.filter((d) => d.domain !== cleaned), data]);
+      setVerifyStatus(STATUS.active);
+      setCustomDomain("");
+      toast.success(data.message || "Domain connected successfully!");
+      setTab("overview");
+    } catch (err) {
+      setVerifyStatus(STATUS.error);
+      setVerifyError(getErrorMessage(err, "Couldn't connect domain. Please try again."));
+    }
   };
 
-  const removeDomain = (domain) => {
-    setConnectedDomains((prev) => prev.filter((d) => d.domain !== domain));
-    toast.success("Domain removed");
+  const handleRecheck = async (id) => {
+    setBusyId(id);
+    try {
+      const { data } = await api.post(`/domains/${id}/verify`);
+      setConnectedDomains((prev) => prev.map((d) => (d.id === id ? data : d)));
+      toast[data.dns_ok ? "success" : "error"](
+        data.dns_ok ? "DNS verified — domain is active" : "DNS records still not found"
+      );
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't re-check DNS."));
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const setPrimary = (domain) => {
-    setConnectedDomains((prev) =>
-      prev.map((d) => ({ ...d, primary: d.domain === domain }))
+  const removeDomain = async (id) => {
+    setBusyId(id);
+    try {
+      await api.delete(`/domains/${id}`);
+      setConnectedDomains((prev) => prev.filter((d) => d.id !== id));
+      toast.success("Domain removed");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't remove domain."));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const setPrimary = async (id) => {
+    setBusyId(id);
+    try {
+      await api.patch(`/domains/${id}/primary`);
+      setConnectedDomains((prev) =>
+        prev.map((d) => ({ ...d, is_primary: d.id === id }))
+      );
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't set primary domain."));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16 flex items-center justify-center text-gray-400 gap-2">
+        <FaSpinner className="animate-spin" /> Loading domain settings…
+      </div>
     );
-  };
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
@@ -116,7 +201,7 @@ export default function DomainSettings() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="font-semibold text-gray-900 text-sm">{FREE_SUBDOMAIN}</p>
+              <p className="font-semibold text-gray-900 text-sm">{freeSubdomain}</p>
               <span className="bg-green-100 text-green-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">
                 Free
               </span>
@@ -130,7 +215,7 @@ export default function DomainSettings() {
           <FaCheckCircle className="text-green-500" size={14} />
           <span className="text-xs text-green-600 font-medium">Active</span>
           <a
-            href={`https://${FREE_SUBDOMAIN}`}
+            href={`https://${freeSubdomain}`}
             target="_blank"
             rel="noreferrer"
             className="ml-2 text-gray-400 hover:text-gray-700"
@@ -146,46 +231,65 @@ export default function DomainSettings() {
           <div className="px-5 py-3 flex items-center justify-between">
             <h2 className="font-semibold text-gray-700 text-sm">Custom domains</h2>
           </div>
-          {connectedDomains.map(({ domain, ssl, primary }) => (
+          {connectedDomains.map((d) => (
             <div
-              key={domain}
+              key={d.id}
               className="px-5 py-4 flex items-center justify-between gap-4"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <FaLock
                   size={12}
-                  className={ssl ? "text-green-500 shrink-0" : "text-gray-300 shrink-0"}
+                  className={d.ssl_active ? "text-green-500 shrink-0" : "text-gray-300 shrink-0"}
                 />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-gray-900 text-sm">{domain}</span>
-                    {primary && (
+                    <span className="font-medium text-gray-900 text-sm">{d.domain}</span>
+                    {d.is_primary && (
                       <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">
                         Primary
                       </span>
                     )}
-                    {ssl && (
+                    {d.status === "active" ? (
                       <span className="flex items-center gap-1 text-[11px] text-green-600">
                         <FaShieldAlt size={9} /> SSL active
                       </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[11px] text-amber-600">
+                        <FaTimesCircle size={9} /> DNS pending
+                      </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">Connected · DNS verified</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {d.status === "active"
+                      ? "Connected · DNS verified"
+                      : "Waiting on DNS records · checking automatically every 15s"}
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                {!primary && (
+                {d.status !== "active" && (
                   <button
-                    onClick={() => setPrimary(domain)}
-                    className="text-xs text-green-600 hover:text-green-700 font-medium border border-green-200 rounded-lg px-3 py-1.5 hover:bg-green-50 transition"
+                    onClick={() => handleRecheck(d.id)}
+                    disabled={busyId === d.id}
+                    className="text-xs text-gray-600 hover:text-gray-800 font-medium border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition disabled:opacity-50"
+                  >
+                    {busyId === d.id ? "Checking…" : "Re-check DNS"}
+                  </button>
+                )}
+                {!d.is_primary && d.status === "active" && (
+                  <button
+                    onClick={() => setPrimary(d.id)}
+                    disabled={busyId === d.id}
+                    className="text-xs text-green-600 hover:text-green-700 font-medium border border-green-200 rounded-lg px-3 py-1.5 hover:bg-green-50 transition disabled:opacity-50"
                   >
                     Set primary
                   </button>
                 )}
                 <button
-                  onClick={() => removeDomain(domain)}
-                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                  onClick={() => removeDomain(d.id)}
+                  disabled={busyId === d.id}
+                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
                 >
                   <FaTrash size={12} />
                 </button>
@@ -292,7 +396,7 @@ export default function DomainSettings() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {DNS_RECORDS.map((rec, i) => (
+                      {dnsRecords.map((rec, i) => (
                         <tr key={i} className="font-mono">
                           <td className="px-4 py-3">
                             <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-0.5 rounded font-sans">
@@ -425,7 +529,7 @@ export default function DomainSettings() {
           </div>
           <p className="font-semibold text-gray-700">No custom domains yet</p>
           <p className="text-gray-400 text-sm mt-1">
-            Your store is running on <span className="font-mono text-gray-600">{FREE_SUBDOMAIN}</span>
+            Your store is running on <span className="font-mono text-gray-600">{freeSubdomain}</span>
           </p>
           <div className="flex items-center justify-center gap-3 mt-5">
             <button

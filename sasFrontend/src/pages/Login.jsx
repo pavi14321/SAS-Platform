@@ -11,6 +11,7 @@ import {
   FaArrowLeft,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
+import api, { getErrorMessage } from "../utils/api";
 
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
@@ -46,7 +47,7 @@ export default function Login() {
     setStep(2);
   };
 
-  const loginHandler = () => {
+  const loginHandler = async () => {
     if (!password) {
       setError("Password is required");
       return;
@@ -55,14 +56,22 @@ export default function Login() {
     setError("");
     setLoading(true);
 
-    // TODO: replace with real auth call (e.g. axios.post("/api/auth/login", { email, password }))
-    // Have the backend return a generic error like "Incorrect email or password"
-    // on failure (don't reveal whether the email exists or the password was wrong).
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const { data } = await api.post("/auth/login", { email, password });
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("store", JSON.stringify(data.store));
+      localStorage.setItem("user", JSON.stringify(data.user));
+
       toast.success("Login successful");
       navigate("/dashboard");
-    }, 1500);
+    } catch (err) {
+      // Backend returns a generic "Incorrect email or password" so we
+      // never reveal whether the email exists or the password was wrong.
+      setError(getErrorMessage(err, "Login failed. Please try again."));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKeyDown = (e, action) => {

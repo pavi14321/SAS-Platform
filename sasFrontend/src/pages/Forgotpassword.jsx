@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FaEye,
@@ -10,6 +10,7 @@ import {
   FaArrowLeft,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
+import api, { getErrorMessage } from "../utils/api";
 
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
@@ -38,147 +39,9 @@ function RuleRow({ passed, label }) {
   );
 }
 
-function OtpModal({ email, onClose, onVerified }) {
-  const [digits, setDigits] = useState(Array(6).fill(""));
-  const [verifying, setVerifying] = useState(false);
-  const [error, setError] = useState("");
-  const [resendCooldown, setResendCooldown] = useState(30);
-  const inputsRef = useRef([]);
-
-  useEffect(() => {
-    inputsRef.current[0]?.focus();
-  }, []);
-
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendCooldown]);
-
-  const handleChange = (idx, val) => {
-    if (!/^[0-9]?$/.test(val)) return;
-    const next = [...digits];
-    next[idx] = val;
-    setDigits(next);
-    setError("");
-    if (val && idx < 5) inputsRef.current[idx + 1]?.focus();
-  };
-
-  const handleKeyDown = (idx, e) => {
-    if (e.key === "Backspace" && !digits[idx] && idx > 0) {
-      inputsRef.current[idx - 1]?.focus();
-    }
-    if (e.key === "Enter") verifyHandler();
-  };
-
-  const handlePaste = (e) => {
-    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (!text) return;
-    e.preventDefault();
-    const next = text.split("");
-    while (next.length < 6) next.push("");
-    setDigits(next);
-    inputsRef.current[Math.min(text.length, 5)]?.focus();
-  };
-
-  const verifyHandler = () => {
-    const code = digits.join("");
-    if (code.length < 6) {
-      setError("Enter the full 6-digit code");
-      return;
-    }
-
-    setVerifying(true);
-    setError("");
-
-    // TODO: replace with real verification call (e.g. axios.post("/api/auth/verify-otp", { email, code }))
-    setTimeout(() => {
-      setVerifying(false);
-      onVerified();
-    }, 1200);
-  };
-
-  const resendHandler = () => {
-    if (resendCooldown > 0) return;
-    // TODO: replace with real resend call (e.g. axios.post("/api/auth/resend-otp", { email }))
-    toast.success("OTP resent to your email");
-    setResendCooldown(30);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 sm:p-7 relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700"
-          aria-label="Close"
-        >
-          <FaTimesCircle size={18} />
-        </button>
-
-        <div className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-green-600 mx-auto flex items-center justify-center text-white">
-            <FaEnvelope size={22} />
-          </div>
-
-          <h2 className="text-2xl font-bold mt-4">Verify it's you</h2>
-
-          <p className="text-gray-500 text-sm mt-2">
-            We've sent a 6-digit OTP to your registered email id. Enter it
-            below to confirm your new password.
-          </p>
-          <p className="text-green-700 font-semibold text-sm mt-1 break-all">
-            {email}
-          </p>
-        </div>
-
-        <div className="flex justify-between gap-2 mt-6" onPaste={handlePaste}>
-          {digits.map((d, i) => (
-            <input
-              key={i}
-              ref={(el) => (inputsRef.current[i] = el)}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={d}
-              onChange={(e) => handleChange(i, e.target.value)}
-              onKeyDown={(e) => handleKeyDown(i, e)}
-              className="w-11 h-12 sm:w-12 sm:h-14 text-center text-xl font-semibold border rounded-xl outline-none focus:border-green-600"
-            />
-          ))}
-        </div>
-
-        {error && (
-          <p className="text-red-500 text-sm mt-3 text-center">{error}</p>
-        )}
-
-        <button
-          onClick={verifyHandler}
-          disabled={verifying}
-          className="w-full mt-6 bg-black hover:bg-gray-900 text-white py-3.5 rounded-xl font-semibold transition disabled:opacity-60"
-        >
-          {verifying ? "Verifying..." : "Verify OTP"}
-        </button>
-
-        <p className="text-center mt-5 text-sm text-gray-600">
-          Didn't get the code?{" "}
-          <button
-            onClick={resendHandler}
-            disabled={resendCooldown > 0}
-            className={`font-semibold ${
-              resendCooldown > 0
-                ? "text-gray-400 cursor-not-allowed"
-                : "text-green-600"
-            }`}
-          >
-            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend OTP"}
-          </button>
-        </p>
-      </div>
-    </div>
-  );
-}
-
+// Generic OTP modal. `onVerify(code)` and `onResend()` are async functions
+// supplied by the parent — they should throw an Error with a readable
+// message on failure and resolve on success.
 export default function ForgotPassword() {
   const navigate = useNavigate();
 
@@ -193,7 +56,6 @@ export default function ForgotPassword() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showOtpModal, setShowOtpModal] = useState(false);
 
   const isEmailValid = email.length > 0 && EMAIL_REGEX.test(email);
   const emailTouched = email.length > 0;
@@ -222,7 +84,7 @@ export default function ForgotPassword() {
     setStep(2);
   };
 
-  const updatePasswordHandler = () => {
+  const updatePasswordHandler = async () => {
     if (!password) {
       setError("New password is required");
       return;
@@ -243,24 +105,24 @@ export default function ForgotPassword() {
     setError("");
     setLoading(true);
 
-    // TODO: replace with a real "send OTP" call (e.g. axios.post("/api/auth/send-otp", { email }))
-    // The password itself is only changed after the OTP is verified (see onOtpVerified below).
-    setTimeout(() => {
+    // OTP is skipped for now — this calls a dev-only backend route
+    // (/auth/reset-password-direct) that updates the password with no
+    // proof of email ownership. See auth.js for the matching route and
+    // its security note before this ever goes to production.
+    try {
+      await api.post("/auth/reset-password-direct", { email, newPassword: password });
+      toast.success("Password updated successfully");
+      navigate("/login");
+    } catch (err) {
+      // e.g. 404 "No account found with this email"
+      setError(getErrorMessage(err, "Couldn't update password."));
+    } finally {
       setLoading(false);
-      toast.success("OTP sent to your email");
-      setShowOtpModal(true);
-    }, 1500);
+    }
   };
 
   const handleKeyDown = (e, action) => {
     if (e.key === "Enter") action();
-  };
-
-  const onOtpVerified = () => {
-    // TODO: replace with real call (e.g. axios.post("/api/auth/reset-password", { email, password }))
-    toast.success("Password updated successfully");
-    setShowOtpModal(false);
-    navigate("/login");
   };
 
   return (
@@ -484,14 +346,6 @@ export default function ForgotPassword() {
           </div>
         </div>
       </div>
-
-      {showOtpModal && (
-        <OtpModal
-          email={email}
-          onClose={() => setShowOtpModal(false)}
-          onVerified={onOtpVerified}
-        />
-      )}
     </div>
   );
 }

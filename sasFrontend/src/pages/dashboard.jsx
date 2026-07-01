@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaHome, FaBoxOpen, FaUsers, FaChartLine, FaPercent,
@@ -8,7 +8,8 @@ import {
   FaBars, FaStore, FaRobot, FaGlobe,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
-import DomainSettings from "./DomainSettings"; // <-- import the domain page
+import api, { getErrorMessage } from "../utils/api";
+import DomainSettings from "./Domainsettings"; // <-- import the domain page
 
 const NAV_ITEMS = [
   { key: "home", label: "Home", icon: FaHome },
@@ -55,10 +56,52 @@ export default function Dashboard() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showTrial, setShowTrial]   = useState(true);
 
-  const storeName = "My Store";
-  const initials  = "MS";
+  const [storeName, setStoreName] = useState("Your Store");
+  const [trialDaysLeft, setTrialDaysLeft] = useState(null);
+  const [isTrial, setIsTrial] = useState(false);
+  const [loadingStore, setLoadingStore] = useState(true);
 
-  const handleLogout = () => { toast.success("Logged out"); navigate("/login"); };
+  const initials = storeName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("") || "S";
+
+  // ── auth guard + load store info ──────────────────────────────────
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    (async () => {
+      try {
+        const [storeRes, trialRes] = await Promise.all([
+          api.get("/store"),
+          api.get("/store/trial"),
+        ]);
+        setStoreName(storeRes.data.name || "Your Store");
+        setIsTrial(trialRes.data.is_trial);
+        setTrialDaysLeft(trialRes.data.days_left);
+        setShowTrial(trialRes.data.is_trial);
+      } catch (err) {
+        toast.error(getErrorMessage(err, "Couldn't load your store."));
+      } finally {
+        setLoadingStore(false);
+      }
+    })();
+  }, [navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("store");
+    localStorage.removeItem("user");
+    toast.success("Logged out");
+    navigate("/login");
+  };
+
   const toggleMenu   = (key) => setOpenMenus((p) => ({ ...p, [key]: !p[key] }));
   const selectItem   = (key) => { setActive(key); setMobileOpen(false); };
 
@@ -105,7 +148,9 @@ export default function Dashboard() {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
         <div className="text-center mb-10">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Welcome to {storeName}!</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
+            {loadingStore ? "Welcome!" : `Welcome to ${storeName}!`}
+          </h1>
           <p className="text-gray-500 mt-1">Where do you want to start?</p>
           <div className="relative mt-6 max-w-xl mx-auto">
             <input type="text" placeholder="Help me come up with a business idea"
@@ -132,7 +177,7 @@ export default function Dashboard() {
               <FaPalette size={11} /> Browse themes
             </button>
           </div>
-          {showTrial && (
+          {showTrial && isTrial && (
             <div className="bg-white rounded-2xl shadow-sm p-6 sm:col-span-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h3 className="font-semibold text-gray-800 text-lg">Your store is in trial mode</h3>
@@ -154,10 +199,14 @@ export default function Dashboard() {
   const SidebarContent = (
     <>
       <div className="flex items-center gap-2 px-5 py-5 border-b border-white/10">
-        <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center text-white font-bold shrink-0">S</div>
+        <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center text-white font-bold shrink-0">
+          {initials[0] || "S"}
+        </div>
         <div className="leading-tight">
           <p className="text-white font-semibold text-sm">{storeName}</p>
-          <p className="text-[11px] text-white/40">Spring '26</p>
+          <p className="text-[11px] text-white/40">
+            {isTrial && trialDaysLeft != null ? `Trial · ${trialDaysLeft}d left` : "Spring '26"}
+          </p>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
@@ -195,12 +244,14 @@ export default function Dashboard() {
           )}
         </div>
       </nav>
-      {showTrial && (
+      {showTrial && isTrial && (
         <div className="p-3">
           <div className="relative bg-gradient-to-br from-green-900/40 to-emerald-900/20 border border-white/10 rounded-xl p-4 pr-8">
             <button onClick={() => setShowTrial(false)} className="absolute top-2.5 right-2.5 text-white/40 hover:text-white transition"><FaTimes size={12} /></button>
-            <p className="text-white text-sm font-semibold">Trial ends in 3 days</p>
-            <p className="text-white/70 text-sm mt-0.5">Subscribe for ₹20</p>
+            <p className="text-white text-sm font-semibold">
+              {trialDaysLeft != null ? `Trial ends in ${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"}` : "You're on a trial"}
+            </p>
+            <p className="text-white/70 text-sm mt-0.5">Subscribe to keep your store live</p>
             <button className="w-full mt-3 bg-white text-[#071311] text-sm font-semibold py-2 rounded-lg hover:bg-white/90 transition">Select a plan</button>
           </div>
           <button onClick={handleLogout} className="w-full mt-3 flex items-center justify-center gap-2 text-white/50 hover:text-white text-sm py-2 transition">
@@ -208,7 +259,7 @@ export default function Dashboard() {
           </button>
         </div>
       )}
-      {!showTrial && (
+      {!(showTrial && isTrial) && (
         <div className="p-3">
           <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-white/50 hover:text-white text-sm py-2 transition">
             <FaSignOutAlt size={13} /> Log out
